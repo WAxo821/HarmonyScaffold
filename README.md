@@ -62,6 +62,15 @@ Target Framework：支持 net48、net472、net6.0、net7.0、net8.0
 默认 net48
 __state 参数：开启后自动生成 object__state 参数，默认关闭
 
+已知的会失败的情况：
+1.泛型方法List<T>.Add(T)生成的typeof(List<T>)无法编译，泛型参数T在C#里不是合法类型
+2.方法名含特殊字符、类名，方法名带.ctor,.cctor <, >转义成_后可能和已有方法冲突
+3.无参数+Finalizer Finalizer(, Exception_exception)参数为空时拼接逗号位置错误
+4.void 返回类型+prefix生成了bool prefix(...)void方法不应该生成bool返回值
+5.抽象方法/接口方法生成typeof(|Myinterface).nameof(MyMethod)接口方法没有实现，typeof语法可能报错
+6.同命名空间多个同名方法（重载）生成的类名可能重复
+7.ClassName_MethodName_Patch不够唯一
+
 ##安装
 下载release中的HarmonyScaffold.dll与HarmonyPatchExtension.x.dll，将其复制至 dnSpyEx/bin 并重启 dnSpyEx 即可使用
 反混淆功能：在 dnSpyEx/bin 中建立 de4dot 文件夹，将下载好的所有 de4dot 文件解压至 dnSpyEx/bin/de4dot 并重启 dnSpyEx 即可使用
