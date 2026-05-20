@@ -8,7 +8,7 @@
 支持prefix/postfix/prefix+postfix 一键生成
 HarmonyTranspiler-修改 IL 指令
 HarmonyFinalizer-带 Exception_exception 参数
-批量多选：Ctrl/Shift 多选一键生成，最多支持 50 个
+批量多选：Ctrl/Shift 多选一键生成，建议单次不超过 50个
 一键生成完整项目：.cs+.csproj+自动引用 Lib.Harmony
 
 ###反混淆
@@ -24,10 +24,10 @@ ref/out 参数自动处理：int&→int
 NameSpace：自定义命名空间
 Author：自动插入//Author：×××
 Export Path：自定义文件保存位置，默认桌面
-Target Framework：支持 48、472、6.0、7.0、8.0
-默认 48
+Target Framework：支持 net48、net472、net6.0、net7.0、net8.0
+默认 net48
 __state 参数：开启后自动生成 object__state 参数，默认关闭
 
 ##安装
 下载release中的HarmonyScaffold.dll与HarmonyPatchExtension.x.dll，将其复制至 dnSpyEx/bin 并重启 dnSpyEx 即可使用
-反混淆功能：在 dnSpyEx/bin 中建立 de4dot 文件夹，将下载好的 de4dot 全家桶解压至 dnSpyEx/bin/de4dot 并重启 dnSpyEx 即可使用
+反混淆功能：在 dnSpyEx/bin 中建立 de4dot 文件夹，将下载好的所有 de4dot 文件解压至 dnSpyEx/bin/de4dot 并重启 dnSpyEx 即可使用
