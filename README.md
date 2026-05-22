@@ -75,6 +75,7 @@ __state 参数：开启后自动生成 object__state 参数，默认关闭
 下载release中的HarmonyScaffold.dll与HarmonyPatchExtension.x.dll，将其复制至 dnSpyEx/bin 并重启 dnSpyEx 即可使用
 反混淆功能：在 dnSpyEx/bin 中建立 de4dot 文件夹，将下载好的所有 de4dot 文件解压至 dnSpyEx/bin/de4dot 并重启 dnSpyEx 即可使用
 
+#2.1版本修复了2.0版本已知的七个bug，将2.1版本的两个dll替换旧版即可
 
 # HarmonyScaffold V2.0
 ## A Harmony Patch Generator & Deobfuscation Tool Integrated in dnSpyEx
@@ -106,6 +107,8 @@ Right-click any assembly in dnSpyEx to automatically generate Harmony patch code
 - **Export Path** — custom save location (default: Desktop)
 - **Target Framework** — supports `net48`, `net472`, `net6.0`, `net7.0`, `net8.0` (default: `net48`)
 - **`__state` Parameter** — auto-generate `object __state` parameter when enabled (default: off)
+
+2.1 fixes all 7 known bugs from 2.0. Overwrite the old DLLs with the two new ones
 
 ## Installation
 
