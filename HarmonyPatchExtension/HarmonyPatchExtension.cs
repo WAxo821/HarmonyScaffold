@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Diagnostics;
 using System.Windows;
 using dnlib.DotNet;
 using dnSpy.Contracts.Documents.Tabs.DocViewer;
@@ -179,7 +179,8 @@ namespace HarmonyPatchExtension
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
         public override void Execute(IMenuItemContext context) => PatchHelper.GenerateProject(context);
     }
-            // ========== de4dot ==========
+
+    // ========== Deobfuscate with de4dot ==========
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Deobfuscate with de4dot", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 200)]
     sealed class De4dotCommand : MenuItemBase
     {
@@ -191,7 +192,7 @@ namespace HarmonyPatchExtension
 
             if (!File.Exists(de4dotExe))
             {
-                MessageBox.Show("de4dot.exe not found!\n\nDownload from:\nhttps://github.com/de4dot/de4dot/releases\n\nExtract only de4dot.exe to dnSpyEx bin folder.", "de4dot Missing");
+                MessageBox.Show("de4dot.exe not found!\n\nExtract de4dot to dnSpyEx\\bin\\de4dot\\ folder.", "de4dot Missing");
                 return;
             }
 
@@ -207,27 +208,32 @@ namespace HarmonyPatchExtension
             string outputPath = Path.Combine(Path.GetDirectoryName(inputPath),
                 Path.GetFileNameWithoutExtension(inputPath) + "_cleaned" + Path.GetExtension(inputPath));
 
-            var process = Process.Start(new ProcessStartInfo
+            var process = new Process
             {
-                FileName = de4dotExe,
-                Arguments = "\"" + inputPath + "\" -o \"" + outputPath + "\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            });
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = de4dotExe,
+                    Arguments = "\"" + inputPath + "\" -o \"" + outputPath + "\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                },
+                EnableRaisingEvents = true
+            };
 
-            process.EnableRaisingEvents = true;
+            string outPath = outputPath;
             process.Exited += (s, e) =>
             {
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
+
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
-                    if (File.Exists(outputPath))
+                    if (File.Exists(outPath))
                     {
-                        Clipboard.SetText(outputPath);
-                        MessageBox.Show("Deobfuscation complete!\n\nOutput:\n" + outputPath + "\n\nPath copied to clipboard.", "de4dot");
+                        Clipboard.SetText(outPath);
+                        MessageBox.Show("Deobfuscation complete!\n\nOutput:\n" + outPath + "\n\nPath copied to clipboard.", "de4dot");
                     }
                     else
                     {
@@ -235,6 +241,8 @@ namespace HarmonyPatchExtension
                     }
                 });
             };
+
+            process.Start();
         }
     }
 
@@ -258,6 +266,10 @@ namespace HarmonyPatchExtension
 
             if (methods.Count == 0) { MessageBox.Show("No valid methods selected."); return; }
 
+            string targetDllPath = "";
+            if (methods[0].Module?.Location != null)
+                targetDllPath = methods[0].Module.Location;
+
             string code = PatchGenerator.GenerateFromMethods(methods, AppSettings.Namespace, "3", AppSettings.Author, AppSettings.StateEnabled);
 
             string projectName = "HotReload_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -265,7 +277,7 @@ namespace HarmonyPatchExtension
             Directory.CreateDirectory(projectDir);
 
             File.WriteAllText(Path.Combine(projectDir, "Patches.cs"), code);
-            string csproj = PatchHelper.GenerateCsproj(projectName);
+            string csproj = PatchHelper.GenerateCsproj(projectName, targetDllPath);
             File.WriteAllText(Path.Combine(projectDir, projectName + ".csproj"), csproj);
 
             var buildProcess = Process.Start(new ProcessStartInfo
@@ -287,7 +299,7 @@ namespace HarmonyPatchExtension
             if (File.Exists(dllPath))
             {
                 Clipboard.SetText(dllPath);
-                MessageBox.Show("Hot Reload project compiled!\n\nDLL:\n" + dllPath + "\n\nReady for injection.\n(Full hot reload integration coming in v3.0)", "Hot Reload");
+                MessageBox.Show("Hot Reload project compiled!\n\nDLL:\n" + dllPath + "\n\nReady for injection.", "Hot Reload");
             }
             else
             {
@@ -295,6 +307,7 @@ namespace HarmonyPatchExtension
             }
         }
     }
+
     // ========== 公共逻辑 ==========
     public static class PatchHelper
     {
@@ -334,7 +347,7 @@ namespace HarmonyPatchExtension
             MessageBox.Show($"Project generated!\n\nFolder: {projectDir}\nFiles:\n  - Patches.cs\n  - {projectName}.csproj\n\nCopied to clipboard.", "Harmony Patch Generator");
         }
 
-                             public static string GenerateCsproj(string projectName, string targetDllPath = "")
+        public static string GenerateCsproj(string projectName, string targetDllPath = "")
         {
             string tfm = AppSettings.TargetFramework;
             string refXml = "";
@@ -345,22 +358,23 @@ namespace HarmonyPatchExtension
                 {
                     foreach (var dll in Directory.GetFiles(dir, "*.dll"))
                     {
+                        if (dll.Contains("&")) continue;
+                        string dllName = Path.GetFileName(dll).ToLower();
+                        if (dllName.StartsWith("amd_") || dllName.StartsWith("nv") || dllName.StartsWith("d3d") || dllName.StartsWith("dxgi") || dllName.StartsWith("steam_")) continue;
                         refXml += $"    <Reference Include=\"{Path.GetFileNameWithoutExtension(dll)}\">\r\n      <HintPath>{dll}</HintPath>\r\n    </Reference>\r\n";
                     }
                 }
             }
-                        return $@"<Project Sdk=""Microsoft.NET.Sdk"">
-                        <PropertyGroup>
-                        <TargetFramework>{tfm}</TargetFramework>
-                         <AssemblyName>{projectName}</AssemblyName>
-                          </PropertyGroup>
-                         <ItemGroup>
-                         <PackageReference Include=""Lib.Harmony"" Version=""2.3.3"" />
-                          {refXml}  </ItemGroup>
-                           </Project>";
+            return $@"<Project Sdk=""Microsoft.NET.Sdk"">
+  <PropertyGroup>
+    <TargetFramework>{tfm}</TargetFramework>
+    <AssemblyName>{projectName}</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include=""Lib.Harmony"" Version=""2.3.3"" />
+{refXml}  </ItemGroup>
+</Project>";
         }
-        
-        
 
         private static string SaveFile(string code)
         {
@@ -407,5 +421,3 @@ namespace HarmonyPatchExtension
         }
     }
 }
-
-
