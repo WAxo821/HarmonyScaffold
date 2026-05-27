@@ -123,4 +123,11 @@ Right-click any assembly in dnSpyEx to automatically generate Harmony patch code
 2. Copy both files into `dnSpyEx\bin\` and restart dnSpyEx.
 3. **For deobfuscation:** create a `de4dot` folder under `dnSpyEx\bin\`, extract all de4dot files into `dnSpyEx\bin\de4dot\`, and restart dnSpyEx.
 
+V2.2 fixes:  
+1. Deadlock in de4dot when asynchronously reading stdout/stderr  
+2. Large number of false positives in ObfuscatorDetector string fuzzy matching  
+3. Generation of typeof(interface) in interface methods cannot be recognized by Harmony  
+4. GenerateCsproj references all DLLs in the target directory  
+5. GenerateAllCommand uses a fixed filename causing repeated overwrites
+
 Done.
