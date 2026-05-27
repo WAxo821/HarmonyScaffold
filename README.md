@@ -77,6 +77,13 @@ __state 参数：开启后自动生成 object__state 参数，默认关闭
 
 #2.1版本修复了2.0版本已知的七个bug，将2.1版本的两个dll替换旧版即可
 
+V2.2版本修复：
+1.de4dot异步读取stdout/stderr死锁
+2.ObfuscatorDetector字符串模糊匹配大量误报
+3.接口方法生成typeof(interface) 无法被 Harmony识别
+4.GenerateCsproj 引用目标目录下全部 DLL
+5.GenerateAllCommand固定文件名导致重复覆盖
+
 # HarmonyScaffold V2.0
 ## A Harmony Patch Generator & Deobfuscation Tool Integrated in dnSpyEx
 
