@@ -179,7 +179,33 @@ namespace HarmonyPatchExtension
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
         public override void Execute(IMenuItemContext context) => PatchHelper.GenerateProject(context);
     }
+        // ========== Generate All Methods in Type ==========
+    [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Generate All Methods in Type", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 106)]
+    sealed class GenerateAllCommand : MenuItemBase
+    {
+        public override bool IsVisible(IMenuItemContext context) =>
+            context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetTypeDefFromNode(n) != null) == true;
 
+        public override void Execute(IMenuItemContext context)
+        {
+            var nodes = context.Find<TreeNodeData[]>();
+            if (nodes == null) return;
+
+            var typeDef = PatchHelper.GetTypeDefFromNode(nodes[0]);
+            if (typeDef == null) { MessageBox.Show("No type selected."); return; }
+
+            var methods = typeDef.Methods.Where(m => m.Body != null).ToList();
+            if (methods.Count == 0) { MessageBox.Show("No methods found in type."); return; }
+
+            string code = PatchGenerator.GenerateFromMethods(methods, AppSettings.Namespace, "3", AppSettings.Author, AppSettings.StateEnabled);
+            string fileName = $"HarmonyPatch_{typeDef.Name}_{DateTime.Now:yyyyMMdd_HHmmss}.cs";
+            string filePath = Path.Combine(AppSettings.ExportPath, fileName);
+            File.WriteAllText(filePath, code);
+            Clipboard.SetText(code);
+            MessageBox.Show($"Generated {methods.Count} methods from {typeDef.Name}!\n\nSaved to: {filePath}", "Harmony Patch Generator");
+        }
+    }
+    
     // ========== Deobfuscate with de4dot ==========
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Deobfuscate with de4dot", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 200)]
     sealed class De4dotCommand : MenuItemBase
@@ -222,17 +248,37 @@ namespace HarmonyPatchExtension
                 EnableRaisingEvents = true
             };
 
+            var outputBuilder = new System.Text.StringBuilder();
+            var errorBuilder = new System.Text.StringBuilder();
+            var outputDone = new System.Threading.ManualResetEvent(false);
+            var errorDone = new System.Threading.ManualResetEvent(false);
+
+            process.OutputDataReceived += (s, e) =>
+            {
+                if (e.Data == null) outputDone.Set();
+                else outputBuilder.AppendLine(e.Data);
+            };
+            process.ErrorDataReceived += (s, e) =>
+            {
+                if (e.Data == null) errorDone.Set();
+                else errorBuilder.AppendLine(e.Data);
+            };
+
             string outPath = outputPath;
             process.Exited += (s, e) =>
             {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
+                outputDone.WaitOne();
+                errorDone.WaitOne();
+                string output = outputBuilder.ToString();
+                string error = errorBuilder.ToString();
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (File.Exists(outPath))
                     {
                         Clipboard.SetText(outPath);
+                        // 自动用 dnSpyEx 打开清理后的文件
+                        Process.Start(Process.GetCurrentProcess().MainModule.FileName, "\"" + outPath + "\"");
                         MessageBox.Show("Deobfuscation complete!\n\nOutput:\n" + outPath + "\n\nPath copied to clipboard.", "de4dot");
                     }
                     else
@@ -243,6 +289,8 @@ namespace HarmonyPatchExtension
             };
 
             process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
         }
     }
 
@@ -290,6 +338,12 @@ namespace HarmonyPatchExtension
                 RedirectStandardError = true
             });
 
+            if (buildProcess == null)
+            {
+                MessageBox.Show("Failed to start dotnet build. Is .NET SDK installed?", "Hot Reload Error");
+                return;
+            }
+
             buildProcess.WaitForExit();
             string buildOutput = buildProcess.StandardOutput.ReadToEnd();
             string buildError = buildProcess.StandardError.ReadToEnd();
@@ -321,7 +375,20 @@ namespace HarmonyPatchExtension
             Clipboard.SetText(code);
             MessageBox.Show($"Generated {methods.Count} patch(es)!\n\nSaved to: {filePath}\nCopied to clipboard.", "Harmony Patch Generator");
         }
+                public static TypeDef GetTypeDefFromNode(TreeNodeData node)
+        {
+            if (node is IMDTokenNode tokenNode)
+                return tokenNode.Reference as TypeDef;
 
+            var prop = node.GetType().GetProperty("Reference");
+            if (prop != null)
+            {
+                var reference = prop.GetValue(node);
+                if (reference is TypeDef td) return td;
+            }
+            return null;
+        }
+        
         public static void GenerateProject(IMenuItemContext context)
         {
             var methods = GetMethods(context);
@@ -353,17 +420,7 @@ namespace HarmonyPatchExtension
             string refXml = "";
             if (!string.IsNullOrEmpty(targetDllPath) && File.Exists(targetDllPath))
             {
-                string dir = Path.GetDirectoryName(targetDllPath);
-                if (Directory.Exists(dir))
-                {
-                    foreach (var dll in Directory.GetFiles(dir, "*.dll"))
-                    {
-                        if (dll.Contains("&")) continue;
-                        string dllName = Path.GetFileName(dll).ToLower();
-                        if (dllName.StartsWith("amd_") || dllName.StartsWith("nv") || dllName.StartsWith("d3d") || dllName.StartsWith("dxgi") || dllName.StartsWith("steam_")) continue;
-                        refXml += $"    <Reference Include=\"{Path.GetFileNameWithoutExtension(dll)}\">\r\n      <HintPath>{dll}</HintPath>\r\n    </Reference>\r\n";
-                    }
-                }
+                refXml = $"    <Reference Include=\"{Path.GetFileNameWithoutExtension(targetDllPath)}\">\r\n      <HintPath>{targetDllPath}</HintPath>\r\n    </Reference>\r\n";
             }
             return $@"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>

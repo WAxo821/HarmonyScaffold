@@ -49,8 +49,8 @@ namespace HarmonyScaffold
                             var prevInstr = i > 0 ? instructions[i - 1] : null;
                             if (prevInstr != null && prevInstr.OpCode == OpCodes.Ldstr)
                             {
-                                // 检查是否是模块内部的方法
-                                bool isInternal = moduleMethods.Any(m => name.Contains(m) || m.Contains(name));
+                                // 检查被调方法是否定义在当前模块内
+                                bool isInternal = moduleMethods.Contains(name);
                                 if (isInternal || name.Contains("<Module>"))
                                 {
                                     if (!result.SuspiciousMethods.Contains(name))

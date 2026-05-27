@@ -31,16 +31,14 @@ namespace HarmonyScaffold
                 string className = declaringType.FullName;
                 string methodName = method.Name;
 
-                // 跳过编译器生成的方法
                 if (methodName.StartsWith("<") || methodName.StartsWith("get_") || methodName.StartsWith("set_"))
                     continue;
 
-                // 接口方法标记，但仍生成（用户需要自己处理）
                 bool isInterface = declaringType.IsInterface;
+                bool isStatic = method.IsStatic;
 
-                // 检查是否是泛型方法
                 bool hasGenericParams = method.HasGenericParameters;
-                                string[] genericParamNames = hasGenericParams
+                string[] genericParamNames = hasGenericParams
                     ? method.GenericParameters.Select(p => p.Name.ToString()).ToArray()
                     : new string[0];
 
@@ -52,11 +50,11 @@ namespace HarmonyScaffold
                     .ToArray();
                 string[] typeParams = new string[0];
 
-                // 检查是否是 void 返回类型
                 bool isVoid = method.ReturnType != null && method.ReturnType.FullName == "System.Void";
+                string returnTypeName = method.ReturnType?.FullName ?? "System.Void";
 
-                string code = Generate(ns, className, typeParams, methodName, paramTypes, paramNames, 
-                    patchChoice, useState, isVoid, isInterface, genericParamNames);
+                string code = Generate(ns, className, typeParams, methodName, paramTypes, paramNames,
+                    patchChoice, useState, isVoid, isInterface, isStatic, returnTypeName, genericParamNames);
                 allCode.Add(code);
             }
 
@@ -79,11 +77,12 @@ namespace HarmonyScaffold
             bool useState = false,
             bool isVoid = false,
             bool isInterface = false,
+            bool isStatic = false,
+            string returnTypeName = "System.Void",
             string[] genericParamNames = null)
         {
             string cleanClassName = className.Replace("+", ".");
 
-            // 处理泛型类名：MyClass`1 -> MyClass<T>
             if (cleanClassName.Contains("`"))
             {
                 var parts = cleanClassName.Split('`');
@@ -96,44 +95,53 @@ namespace HarmonyScaffold
                 }
             }
 
-            // 生成唯一类名，避免重载冲突
             _patchCounter++;
             string uniqueSuffix = _patchCounter > 1 ? "_" + _patchCounter : "";
             string patchClassName = $"{CleanMethodName(cleanClassName)}_{CleanMethodName(methodName)}_Patch{uniqueSuffix}";
-
             string classNameWithGenerics = cleanClassName;
 
-            // 泛型方法参数
             string genericMethodParams = "";
             if (genericParamNames != null && genericParamNames.Length > 0)
-            {
                 genericMethodParams = "<" + string.Join(", ", genericParamNames) + ">";
-            }
 
-            string paramSignature = "";
+            // __instance 参数（非静态方法自动加）
+            string instanceParam = (!isStatic && patchChoice != "4")
+                ? $"{cleanClassName} __instance, "
+                : "";
+
+                        string paramSignature = "";
             if (paramTypes.Length > 0 && paramNames.Length > 0)
             {
-                var pairs = new string[Math.Min(paramTypes.Length, paramNames.Length)];
-                for (int i = 0; i < pairs.Length; i++)
+                var filteredPairs = new List<string>();
+                for (int i = 0; i < Math.Min(paramTypes.Length, paramNames.Length); i++)
                 {
-                    pairs[i] = $"{paramTypes[i]} {paramNames[i]}";
+                    if (paramTypes[i] == cleanClassName)
+                        continue;
+                    filteredPairs.Add($"{paramTypes[i]} {paramNames[i]}");
                 }
-                paramSignature = string.Join(", ", pairs);
+                paramSignature = string.Join(", ", filteredPairs);
             }
 
             string stateParam = useState ? "object __state, " : "";
+
+            // __result 参数（Postfix 自动加）
+            string resultParam = "";
+            if ((patchChoice == "2" || patchChoice == "3") && !isVoid && returnTypeName != "System.Void")
+                resultParam = $"{returnTypeName} __result, ";
 
             string prefixCode = "";
             string postfixCode = "";
             string transpilerCode = "";
             string finalizerCode = "";
 
-                       if (patchChoice == "1" || patchChoice == "3")
+            if (patchChoice == "1" || patchChoice == "3")
             {
+                string fullParams = instanceParam + stateParam + paramSignature;
+                fullParams = fullParams.TrimEnd(',', ' ');
                 if (isVoid)
                 {
                     prefixCode = $@"
-        public static void Prefix({stateParam}{paramSignature})
+        public static void Prefix({fullParams})
         {{
             // Your logic here
         }}";
@@ -141,7 +149,7 @@ namespace HarmonyScaffold
                 else
                 {
                     prefixCode = $@"
-        public static bool Prefix({stateParam}{paramSignature})
+        public static bool Prefix({fullParams})
         {{
             // Your logic here
             return true;
@@ -151,8 +159,10 @@ namespace HarmonyScaffold
 
             if (patchChoice == "2" || patchChoice == "3")
             {
+                string fullParams = instanceParam + stateParam + resultParam + paramSignature;
+                fullParams = fullParams.TrimEnd(',', ' ');
                 postfixCode = $@"
-        public static void Postfix({stateParam}{paramSignature})
+        public static void Postfix({fullParams})
         {{
             // Your logic here
         }}";
@@ -170,7 +180,8 @@ namespace HarmonyScaffold
 
             if (patchChoice == "5")
             {
-                string finalizerParams = paramSignature;
+                string finalizerParams = instanceParam + paramSignature;
+                finalizerParams = finalizerParams.TrimEnd(',', ' ');
                 if (!string.IsNullOrEmpty(finalizerParams))
                     finalizerParams += ", ";
                 finalizerParams += "Exception __exception";
@@ -182,16 +193,21 @@ namespace HarmonyScaffold
             }
 
             string interfaceWarning = isInterface
-                ? "        // WARNING: This is an interface method. Use a concrete type for typeof().\r\n"
+                ? $"        // WARNING: '{classNameWithGenerics}' is an interface. Replace typeof() with a concrete type and verify the method name.\r\n"
                 : "";
 
             string genericWarning = (genericParamNames != null && genericParamNames.Length > 0)
-                ? "        // WARNING: This is a generic method. You may need to adjust the type parameters.\r\n"
+                ? $"        // WARNING: Generic method — string overload \"{methodName}\" used. Verify Harmony resolves the correct method.\r\n"
                 : "";
+
+            // nameof 不支持泛型参数, 接口方法也无法直接 patch, 此时用字符串重载
+            string methodRef = (genericParamNames != null && genericParamNames.Length > 0) || isInterface
+                ? $"\"{methodName}\""
+                : $"nameof({classNameWithGenerics}.{methodName}{genericMethodParams})";
 
             return $@"namespace {ns}.Patches
 {{
-    [HarmonyPatch(typeof({classNameWithGenerics}), nameof({classNameWithGenerics}.{methodName}{genericMethodParams}))]
+    [HarmonyPatch(typeof({classNameWithGenerics}), {methodRef})]
     public static class {patchClassName}
     {{{interfaceWarning}{genericWarning}{prefixCode}{postfixCode}{transpilerCode}{finalizerCode}
     }}
