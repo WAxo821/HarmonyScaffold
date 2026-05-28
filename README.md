@@ -74,13 +74,11 @@ harmony-scaffold generate --json '{"class":"Player","method":"TakeDamage",...}'
 
 ### 2. VS Code 扩展
 
-将 `HarmonyScaffold.VSCode/` 文件夹复制到：
+下载 `harmony-scaffold-3.0.0.vsix`，双击安装；或在 VS Code 中 `Ctrl+Shift+P` → `Extensions: Install from VSIX` 选择该文件。
 
-```
-%USERPROFILE%\.vscode\extensions\harmony-scaffold.harmony-scaffold-3.0.0\
-```
+### 3. CLI 工具（可选）
 
-重启 VS Code 即可。
+下载 `harmony-scaffold.exe`，自包含单文件，无需 .NET 运行时，可直接使用或加入 PATH。
 
 ### 3. CLI 工具（可选）
 

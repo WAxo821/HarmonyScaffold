@@ -2,7 +2,7 @@
   "name": "harmony-scaffold",
   "displayName": "Harmony Scaffold",
   "description": "One-click BepInEx plugin init and Harmony patch generation for Unity modding",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "publisher": "harmony-scaffold",
   "engines": {
     "vscode": "^1.85.0"
