@@ -1,6 +1,9 @@
 bin/
 obj/
+!HarmonyScaffold.VSCode/bin/
 *.user
 *.suo
 *.cache
 *.ini
+node_modules/
+.vscode/
