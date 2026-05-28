@@ -46,8 +46,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="PatchCodeGenerator.cs" />
     <Compile Include="PatchGenerator.cs" />
-    <Compile Include="Program.cs" />
     <Compile Include="ObfuscatorDetector.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
