@@ -16,7 +16,7 @@ IMPORTANT: Please read the following terms carefully before use.
 
 ---
 
-# HarmonyScaffold V3.0
+# HarmonyScaffold V3.1
 
 dnSpyEx + VS Code + CLI 三位一体的 Harmony 补丁开发工具链。
 
@@ -107,6 +107,21 @@ harmony-scaffold generate --json '{"class":"Player","method":"TakeDamage",...}'
 
 ---
 
+## V3.0 → V3.1 变更
+
+- 新增 `PatchType` 常量类，消除所有硬编码 patch type 字符串
+- AppSettings 写入增加 try-catch 保护，非管理员权限也不崩溃
+- AppSettings.Folder 增加 CodeBase → LocalPath 回退（解决影子程序集路径为空的问题）
+- de4dot 异步读取移至 Start() 之前，消除管道竞态条件
+- `ManualResetEvent` 使用后释放，防止句柄泄漏
+- `Dispatcher.BeginInvoke` 回调增加 try-catch，防止剪贴板异常崩溃
+- `GenerateAllCommand` 修复 `Directory.CreateDirectory` 缺失导致导出路径不存在时崩溃
+- Bridge 发送逻辑修复：`get_`/`set_` 方法不再被误判为连接失败
+- Bridge 成功/失败消息修复：过滤后的方法不计入总数
+- 泛型类型 `__instance` / `__result` / 参数声明修复：开放泛型自动降级为 `object`
+- 移除 `paramTypes == className` 无效过滤（dnlib 格式与 C# 格式不兼容）
+- CLI 计数器改用 `Interlocked.Increment`
+
 ## V2.x → V3.0 变更
 
 V2.0/V2.1 所有已知 Bug 在 V3.0 已全部修复：
@@ -131,4 +146,4 @@ V2.0/V2.1 所有已知 Bug 在 V3.0 已全部修复：
 | `HarmonyScaffold.dll` | 核心逻辑库 |
 | `HarmonyPatchExtension.x.dll` | dnSpyEx 扩展入口 |
 | `harmony-scaffold.exe` | 独立 CLI 工具 |
-| `HarmonyScaffold.VSCode/` | VS Code 扩展源码 |
+| `harmony-scaffold-3.1.0.vsix` | VS Code 扩展安装包 |

@@ -34,13 +34,13 @@
     <Reference Include="WindowsBase" />
     <Reference Include="System.Xaml" />
     <Reference Include="dnSpy.Contracts.DnSpy">
-      <HintPath>C:\Users\Benjamin\Desktop\dnSpyEX\bin\dnSpy.Contracts.DnSpy.dll</HintPath>
+      <HintPath>..\..\dnSpyEX\bin\dnSpy.Contracts.DnSpy.dll</HintPath>
     </Reference>
     <Reference Include="dnSpy.Contracts.Logic">
-      <HintPath>C:\Users\Benjamin\Desktop\dnSpyEX\bin\dnSpy.Contracts.Logic.dll</HintPath>
+      <HintPath>..\..\dnSpyEX\bin\dnSpy.Contracts.Logic.dll</HintPath>
     </Reference>
     <Reference Include="dnlib">
-      <HintPath>C:\Users\Benjamin\Desktop\dnSpyEX\bin\dnlib.dll</HintPath>
+      <HintPath>..\..\dnSpyEX\bin\dnlib.dll</HintPath>
     </Reference>
     <Reference Include="System.Net.Http" />
   </ItemGroup>

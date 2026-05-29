@@ -1,58 +1,62 @@
 {
-  "name": "harmony-scaffold",
-  "displayName": "Harmony Scaffold",
-  "description": "One-click BepInEx plugin init and Harmony patch generation for Unity modding",
-  "version": "3.0.0",
-  "publisher": "harmony-scaffold",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": ["Other"],
-  "activationEvents": [],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "harmony-scaffold.init",
-        "title": "Harmony Scaffold: Initialize BepInEx Plugin Project"
-      },
-      {
-        "command": "harmony-scaffold.generate",
-        "title": "Harmony Scaffold: Generate Harmony Patch"
-      },
-      {
-        "command": "harmony-scaffold.startBridge",
-        "title": "Harmony Scaffold: Start Bridge (listen for dnSpyEx)"
-      },
-      {
-        "command": "harmony-scaffold.stopBridge",
-        "title": "Harmony Scaffold: Stop Bridge"
-      },
-      {
-        "command": "harmony-scaffold.toggleBridge",
-        "title": "Harmony Scaffold: Toggle Bridge"
-      }
-    ],
-    "menus": {
-      "explorer/context": [
-        {
-          "command": "harmony-scaffold.init",
-          "when": "explorerResourceIsFolder",
-          "group": "harmony"
-        }
-      ]
-    }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "package": "vsce package"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.3.0",
-    "@vscode/vsce": "^3.0.0"
-  }
+    "name":  "harmony-scaffold",
+    "displayName":  "Harmony Scaffold",
+    "description":  "One-click BepInEx plugin init and Harmony patch generation for Unity modding",
+    "version":  "3.1.0",
+    "publisher":  "harmony-scaffold",
+    "engines":  {
+                    "vscode":  "^1.85.0"
+                },
+    "categories":  [
+                       "Other"
+                   ],
+    "activationEvents":  [
+
+                         ],
+    "main":  "./out/extension.js",
+    "contributes":  {
+                        "commands":  [
+                                         {
+                                             "command":  "harmony-scaffold.init",
+                                             "title":  "Harmony Scaffold: Initialize BepInEx Plugin Project"
+                                         },
+                                         {
+                                             "command":  "harmony-scaffold.generate",
+                                             "title":  "Harmony Scaffold: Generate Harmony Patch"
+                                         },
+                                         {
+                                             "command":  "harmony-scaffold.startBridge",
+                                             "title":  "Harmony Scaffold: Start Bridge (listen for dnSpyEx)"
+                                         },
+                                         {
+                                             "command":  "harmony-scaffold.stopBridge",
+                                             "title":  "Harmony Scaffold: Stop Bridge"
+                                         },
+                                         {
+                                             "command":  "harmony-scaffold.toggleBridge",
+                                             "title":  "Harmony Scaffold: Toggle Bridge"
+                                         }
+                                     ],
+                        "menus":  {
+                                      "explorer/context":  [
+                                                               {
+                                                                   "command":  "harmony-scaffold.init",
+                                                                   "when":  "explorerResourceIsFolder",
+                                                                   "group":  "harmony"
+                                                               }
+                                                           ]
+                                  }
+                    },
+    "scripts":  {
+                    "vscode:prepublish":  "npm run compile",
+                    "compile":  "tsc -p ./",
+                    "watch":  "tsc -watch -p ./",
+                    "package":  "vsce package"
+                },
+    "devDependencies":  {
+                            "@types/vscode":  "^1.85.0",
+                            "@types/node":  "^20.0.0",
+                            "typescript":  "^5.3.0",
+                            "@vscode/vsce":  "^3.0.0"
+                        }
 }

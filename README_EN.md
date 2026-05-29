@@ -9,7 +9,7 @@ IMPORTANT: Please read the following terms carefully before use.
 
 ---
 
-# HarmonyScaffold V3.0
+# HarmonyScaffold V3.1
 
 A three-in-one Harmony patch development toolchain: dnSpyEx + VS Code + CLI.
 
@@ -96,6 +96,21 @@ Five patch types can be sent independently: `Send Prefix / Postfix / Prefix+Post
 
 ---
 
+## V3.0 → V3.1 Changelog
+
+- Added `PatchType` constants class — all hardcoded patch type strings eliminated
+- AppSettings writes now use try-catch (no crash when running without admin)
+- AppSettings.Folder gains CodeBase → LocalPath fallback for shadow-assembly scenarios
+- de4dot async reads moved before Start() to eliminate pipe race condition
+- `ManualResetEvent` objects now disposed to prevent handle leaks
+- `Dispatcher.BeginInvoke` callback wrapped in try-catch (clipboard crash guard)
+- `GenerateAllCommand` now ensures the export directory exists before writing
+- Bridge send logic: `get_`/`set_` methods no longer falsely treated as connection failures
+- Bridge messages: filtered methods excluded from sent/total count
+- Generic type `__instance` / `__result` / parameter declarations: open generics degrade to `object`
+- Removed dead `paramTypes == className` filter (format mismatch between dnlib and C#)
+- CLI counter thread-safety via `Interlocked.Increment`
+
 ## V2.x → V3.0 Changelog
 
 All known V2.0/V2.1 bugs have been fixed in V3.0:
@@ -120,4 +135,4 @@ All known V2.0/V2.1 bugs have been fixed in V3.0:
 | `HarmonyScaffold.dll` | Core logic library |
 | `HarmonyPatchExtension.x.dll` | dnSpyEx extension entry point |
 | `harmony-scaffold.exe` | Standalone CLI tool |
-| `harmony-scaffold-3.0.0.vsix` | VS Code extension installer |
+| `harmony-scaffold-3.1.0.vsix` | VS Code extension installer |

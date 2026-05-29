@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 namespace HarmonyScaffold
 {
@@ -32,10 +34,10 @@ namespace HarmonyScaffold
             if (cleanClassName.Contains("`"))
             {
                 var parts = cleanClassName.Split('`');
-                if (parts.Length == 2 && int.TryParse(parts[1], out int count))
+                if (parts.Length == 2 && int.TryParse(parts[1], out int arity))
                 {
-                    genericArity = count;
-                    string commas = count > 1 ? new string(',', count - 1) : "";
+                    genericArity = arity;
+                    string commas = arity > 1 ? new string(',', arity - 1) : "";
                     cleanClassName = parts[0] + "<" + commas + ">";
                 }
             }
@@ -45,8 +47,8 @@ namespace HarmonyScaffold
                 patchChoice != "4" && patchChoice != "5")
                 patchChoice = "3";
 
-            _patchCounter++;
-            string uniqueSuffix = _patchCounter > 1 ? "_" + _patchCounter : "";
+            int count = Interlocked.Increment(ref _patchCounter);
+            string uniqueSuffix = count > 1 ? "_" + count : "";
             string patchClassName = $"{CleanMethodName(cleanClassName)}_{CleanMethodName(methodName)}_Patch{uniqueSuffix}";
             string classNameWithGenerics = cleanClassName;
 
@@ -54,8 +56,9 @@ namespace HarmonyScaffold
             if (genericParamNames != null && genericParamNames.Length > 0)
                 genericMethodParams = "<" + string.Join(", ", genericParamNames) + ">";
 
+            string instanceType = genericArity > 0 ? "object" : cleanClassName;
             string instanceParam = (!isStatic && patchChoice != "4")
-                ? $"{cleanClassName} __instance, "
+                ? $"{instanceType} __instance, "
                 : "";
 
             string paramSignature = "";
@@ -64,18 +67,19 @@ namespace HarmonyScaffold
                 var filteredPairs = new List<string>();
                 for (int i = 0; i < Math.Min(paramTypes.Length, paramNames.Length); i++)
                 {
-                    if (paramTypes[i] == cleanClassName)
-                        continue;
-                    filteredPairs.Add($"{paramTypes[i]} {paramNames[i]}");
+                    string cleanType = CleanGenericTypeName(paramTypes[i]);
+                    filteredPairs.Add($"{cleanType} {paramNames[i]}");
                 }
                 paramSignature = string.Join(", ", filteredPairs);
             }
 
             string stateParam = useState ? "object __state, " : "";
 
+            // Normalize return type: backtick → C# format, fallback to object for open generics
+            string cleanReturnType = CleanGenericTypeName(returnTypeName);
             string resultParam = "";
             if ((patchChoice == "2" || patchChoice == "3") && !isVoid && returnTypeName != "System.Void")
-                resultParam = $"{returnTypeName} __result, ";
+                resultParam = $"{cleanReturnType} __result, ";
 
             string prefixCode = "";
             string postfixCode = "";
@@ -171,6 +175,48 @@ namespace HarmonyScaffold
             return typeName.Replace("&", "");
         }
 
+        /// <summary>
+        /// Converts dnlib backtick notation (List`1) to C# open-generic (List<>).
+        /// Falls back to "object" when the result would be an un-declarable open generic.
+        /// </summary>
+        private static string CleanGenericTypeName(string fullName)
+        {
+            if (string.IsNullOrEmpty(fullName)) return "object";
+
+            // Handle by-ref types
+            bool isByRef = fullName.EndsWith("&");
+            if (isByRef) fullName = fullName.TrimEnd('&');
+
+            string result = fullName;
+
+            // Convert backtick N → <,,> (open generic arity)
+            int tick = result.IndexOf('`');
+            if (tick >= 0)
+            {
+                string baseName = result.Substring(0, tick);
+                string suffix = result.Substring(tick + 1);
+                // Only convert if the suffix is a number (generic arity)
+                if (int.TryParse(suffix, out int arity) && arity > 0)
+                {
+                    string commas = arity > 1 ? new string(',', arity - 1) : "";
+                    result = baseName + "<" + commas + ">";
+                }
+            }
+
+            // Open generics cannot be used as variable/argument types — fall back to object
+            if (result.Contains("<") && result.Contains(">") && result.IndexOf('<') < result.IndexOf('>'))
+            {
+                int openStart = result.IndexOf('<');
+                int openEnd = result.LastIndexOf('>');
+                // Check if the bracket-enclosed content is only commas (open generic) or actual types
+                string inner = result.Substring(openStart + 1, openEnd - openStart - 1);
+                if (string.IsNullOrEmpty(inner) || inner.All(c => c == ','))
+                    return "object";
+            }
+
+            return isByRef ? "ref " + result : result;
+        }
+
         public static string CleanMethodName(string name)
         {
             return name.Replace(".", "_")
@@ -184,6 +230,6 @@ namespace HarmonyScaffold
                        .Replace(":", "_");
         }
 
-        internal static void ResetCounter() => _patchCounter = 0;
+        internal static void ResetCounter() => Interlocked.Exchange(ref _patchCounter, 0);
     }
 }

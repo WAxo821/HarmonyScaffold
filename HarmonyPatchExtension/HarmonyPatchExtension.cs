@@ -15,6 +15,18 @@ using HarmonyScaffold;
 
 namespace HarmonyPatchExtension
 {
+    /// <summary>
+    /// Harmony patch types. Values match the internal protocol used by PatchCodeGenerator.
+    /// </summary>
+    public static class PatchType
+    {
+        public const string Prefix = "1";
+        public const string Postfix = "2";
+        public const string Both = "3";
+        public const string Transpiler = "4";
+        public const string Finalizer = "5";
+    }
+
     [ExportAutoLoaded(LoadType = AutoLoadedLoadType.AppLoaded)]
     public sealed class AutoLoadedEntry : IAutoLoaded
     {
@@ -37,23 +49,43 @@ namespace HarmonyPatchExtension
     // ========== Settings ==========
     public static class AppSettings
     {
-        static string Folder => Path.GetDirectoryName(typeof(AppSettings).Assembly.Location);
+        internal static string Folder
+        {
+            get
+            {
+                string loc = typeof(AppSettings).Assembly.Location;
+                // Shadow copy / dynamic assemblies can return empty string
+                if (string.IsNullOrEmpty(loc))
+                {
+                    var uri = new Uri(typeof(AppSettings).Assembly.CodeBase);
+                    loc = uri.LocalPath;
+                }
+                return Path.GetDirectoryName(loc) ?? AppDomain.CurrentDomain.BaseDirectory;
+            }
+        }
+
         static string NsFile => Path.Combine(Folder, "harmony_namespace.ini");
         static string AuthorFile => Path.Combine(Folder, "harmony_author.ini");
         static string ExportPathFile => Path.Combine(Folder, "harmony_exportpath.ini");
         static string StateFile => Path.Combine(Folder, "harmony_state.ini");
         static string TargetFrameworkFile => Path.Combine(Folder, "harmony_framework.ini");
 
+        static void SafeWrite(string path, string content)
+        {
+            try { File.WriteAllText(path, content); }
+            catch (Exception ex) { Debug.WriteLine($"AppSettings write failed: {path} — {ex.Message}"); }
+        }
+
         public static string Namespace
         {
             get { try { return File.ReadAllText(NsFile); } catch { return "MyPatches"; } }
-            set => File.WriteAllText(NsFile, value);
+            set => SafeWrite(NsFile, value);
         }
 
         public static string Author
         {
             get { try { return File.ReadAllText(AuthorFile); } catch { return ""; } }
-            set => File.WriteAllText(AuthorFile, value);
+            set => SafeWrite(AuthorFile, value);
         }
 
         public static string ExportPath
@@ -63,27 +95,27 @@ namespace HarmonyPatchExtension
                 try { return File.ReadAllText(ExportPathFile); }
                 catch { return Environment.GetFolderPath(Environment.SpecialFolder.Desktop); }
             }
-            set => File.WriteAllText(ExportPathFile, value);
+            set => SafeWrite(ExportPathFile, value);
         }
 
         public static bool StateEnabled
         {
             get
             {
-                try { return File.ReadAllText(StateFile) == "1"; }
+                try { return File.ReadAllText(StateFile).Trim() == "1"; }
                 catch { return false; }
             }
-            set => File.WriteAllText(StateFile, value ? "1" : "0");
+            set => SafeWrite(StateFile, value ? "1" : "0");
         }
 
         public static string TargetFramework
         {
             get
             {
-                try { return File.ReadAllText(TargetFrameworkFile); }
+                try { return File.ReadAllText(TargetFrameworkFile).Trim(); }
                 catch { return "net48"; }
             }
-            set => File.WriteAllText(TargetFrameworkFile, value);
+            set => SafeWrite(TargetFrameworkFile, value);
         }
     }
 
@@ -107,7 +139,7 @@ namespace HarmonyPatchExtension
 
             string exportPath = Microsoft.VisualBasic.Interaction.InputBox(
                 "Enter export folder path:", "Harmony Patch Settings", AppSettings.ExportPath, -1, -1);
-            if (!string.IsNullOrWhiteSpace(exportPath) && Directory.Exists(exportPath))
+            if (!string.IsNullOrWhiteSpace(exportPath))
                 AppSettings.ExportPath = exportPath.Trim();
 
             string framework = Microsoft.VisualBasic.Interaction.InputBox(
@@ -134,7 +166,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, "1");
+        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, PatchType.Prefix);
     }
 
     // ========== Postfix ==========
@@ -143,7 +175,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, "2");
+        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, PatchType.Postfix);
     }
 
     // ========== Prefix + Postfix ==========
@@ -152,7 +184,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, "3");
+        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, PatchType.Both);
     }
 
     // ========== Transpiler ==========
@@ -161,7 +193,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, "4");
+        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, PatchType.Transpiler);
     }
 
     // ========== Finalizer ==========
@@ -170,7 +202,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, "5");
+        public override void Execute(IMenuItemContext context) => PatchHelper.GeneratePatch(context, PatchType.Finalizer);
     }
 
     // ========== Generate Full Project ==========
@@ -199,10 +231,8 @@ namespace HarmonyPatchExtension
             var methods = typeDef.Methods.Where(m => m.Body != null).ToList();
             if (methods.Count == 0) { MessageBox.Show("No methods found in type."); return; }
 
-            string code = PatchGenerator.GenerateFromMethods(methods, AppSettings.Namespace, "3", AppSettings.Author, AppSettings.StateEnabled);
-            string fileName = $"HarmonyPatch_{typeDef.Name}_{DateTime.Now:yyyyMMdd_HHmmss}.cs";
-            string filePath = Path.Combine(AppSettings.ExportPath, fileName);
-            File.WriteAllText(filePath, code);
+            string code = PatchGenerator.GenerateFromMethods(methods, AppSettings.Namespace, PatchType.Both, AppSettings.Author, AppSettings.StateEnabled);
+            string filePath = PatchHelper.SaveFile(code, typeDef.Name);
             Clipboard.SetText(code);
             MessageBox.Show($"Generated {methods.Count} methods from {typeDef.Name}!\n\nSaved to: {filePath}", "Harmony Patch Generator");
         }
@@ -214,7 +244,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, "1");
+        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, PatchType.Prefix);
     }
 
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Send Postfix to VS Code", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 111)]
@@ -222,7 +252,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, "2");
+        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, PatchType.Postfix);
     }
 
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Send Prefix+Postfix to VS Code", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 112)]
@@ -230,7 +260,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, "3");
+        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, PatchType.Both);
     }
 
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Send Transpiler to VS Code", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 113)]
@@ -238,7 +268,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, "4");
+        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, PatchType.Transpiler);
     }
 
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Send Finalizer to VS Code", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 114)]
@@ -246,7 +276,7 @@ namespace HarmonyPatchExtension
     {
         public override bool IsVisible(IMenuItemContext context) =>
             context.Find<TreeNodeData[]>()?.Any(n => PatchHelper.GetMethodDefFromNode(n) != null) == true;
-        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, "5");
+        public override void Execute(IMenuItemContext context) => PatchHelper.SendToVSCode(context, PatchType.Finalizer);
     }
 
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Send Type to VS Code", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 120)]
@@ -262,20 +292,25 @@ namespace HarmonyPatchExtension
             var typeDef = PatchHelper.GetTypeDefFromNode(nodes[0]);
             if (typeDef == null) { MessageBox.Show("No type selected."); return; }
 
-            var methods = typeDef.Methods.Where(m => m.Body != null).ToList();
+            var eligible = typeDef.Methods
+                .Where(m => m.Body != null)
+                .Where(PatchHelper.IsMethodPatchable)
+                .ToList();
             int sent = 0;
-            foreach (var method in methods)
+            foreach (var method in eligible)
             {
-                if (method.Name == ".ctor" || method.Name == ".cctor") continue;
-                if (method.Name.StartsWith("<") || method.Name.StartsWith("get_") || method.Name.StartsWith("set_")) continue;
-                if (!PatchHelper.SendMethodToBridge(method, AppSettings.Namespace, "3", AppSettings.Author,
+                if (!PatchHelper.SendMethodToBridge(method, AppSettings.Namespace, PatchType.Both, AppSettings.Author,
                     AppSettings.StateEnabled, AppSettings.ExportPath))
                     break;
                 sent++;
             }
-            string msg = sent == methods.Count
-                ? $"Sent all {sent} methods to VS Code."
-                : $"Sent {sent}/{methods.Count} methods to VS Code. Bridge may be offline.";
+            string msg;
+            if (sent == 0)
+                msg = "Failed to send. Make sure the Harmony bridge is running in VS Code (localhost:5566).";
+            else if (sent == eligible.Count)
+                msg = $"Sent all {sent} methods to VS Code.";
+            else
+                msg = $"Sent {sent}/{eligible.Count} methods to VS Code. Bridge may be offline.";
             MessageBox.Show(msg, "Harmony → VS Code");
         }
     }
@@ -288,7 +323,7 @@ namespace HarmonyPatchExtension
 
         public override void Execute(IMenuItemContext context)
         {
-            string de4dotExe = Path.Combine(Path.GetDirectoryName(typeof(AppSettings).Assembly.Location), "de4dot", "de4dot.exe");
+            string de4dotExe = Path.Combine(AppSettings.Folder, "de4dot", "de4dot.exe");
 
             if (!File.Exists(de4dotExe))
             {
@@ -308,12 +343,15 @@ namespace HarmonyPatchExtension
             string outputPath = Path.Combine(Path.GetDirectoryName(inputPath),
                 Path.GetFileNameWithoutExtension(inputPath) + "_cleaned" + Path.GetExtension(inputPath));
 
+            // Escape paths to prevent command injection
+            string EscapeArg(string arg) => "\"" + arg.Replace("\"", "\\\"") + "\"";
+
             var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = de4dotExe,
-                    Arguments = "\"" + inputPath + "\" -o \"" + outputPath + "\"",
+                    Arguments = EscapeArg(inputPath) + " -o " + EscapeArg(outputPath),
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
@@ -346,25 +384,38 @@ namespace HarmonyPatchExtension
                 string output = outputBuilder.ToString();
                 string error = errorBuilder.ToString();
 
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(() =>
                 {
-                    if (File.Exists(outPath))
+                    try
                     {
-                        Clipboard.SetText(outPath);
-                        // 自动用 dnSpyEx 打开清理后的文件
-                        Process.Start(Process.GetCurrentProcess().MainModule.FileName, "\"" + outPath + "\"");
-                        MessageBox.Show("Deobfuscation complete!\n\nOutput:\n" + outPath + "\n\nPath copied to clipboard.", "de4dot");
+                        if (File.Exists(outPath))
+                        {
+                            Clipboard.SetText(outPath);
+                            var currentExe = Process.GetCurrentProcess().MainModule?.FileName;
+                            if (currentExe != null)
+                                Process.Start(currentExe, EscapeArg(outPath));
+                            MessageBox.Show("Deobfuscation complete!\n\nOutput:\n" + outPath + "\n\nPath copied to clipboard.", "de4dot");
+                        }
+                        else
+                        {
+                            MessageBox.Show("Deobfuscation failed!\n\n" + error, "de4dot Error");
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        MessageBox.Show("Deobfuscation failed!\n\n" + error, "de4dot Error");
+                        Debug.WriteLine($"De4dot dispatcher error: {ex.Message}");
                     }
-                });
+                }));
+                outputDone.Dispose();
+                errorDone.Dispose();
+                process.Dispose();
             };
 
-            process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            process.Start();
         }
     }
 
@@ -400,7 +451,7 @@ namespace HarmonyPatchExtension
             var methods = GetMethods(context);
             if (methods == null || methods.Count == 0) return;
 
-            string code = PatchGenerator.GenerateFromMethods(methods, AppSettings.Namespace, "3", AppSettings.Author, AppSettings.StateEnabled);
+            string code = PatchGenerator.GenerateFromMethods(methods, AppSettings.Namespace, PatchType.Both, AppSettings.Author, AppSettings.StateEnabled);
 
             string projectName = "HarmonyPatch_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string exportPath = AppSettings.ExportPath;
@@ -439,12 +490,14 @@ namespace HarmonyPatchExtension
 </Project>";
         }
 
-        private static string SaveFile(string code)
+        internal static string SaveFile(string code, string namePrefix = null)
         {
-            string fileName = $"HarmonyPatch_{DateTime.Now:yyyyMMdd_HHmmss}.cs";
+            string prefix = namePrefix ?? "HarmonyPatch";
+            string fileName = $"{prefix}_{DateTime.Now:yyyyMMdd_HHmmss}.cs";
             string exportPath = AppSettings.ExportPath;
             if (!Directory.Exists(exportPath))
                 exportPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            Directory.CreateDirectory(exportPath);
             string filePath = Path.Combine(exportPath, fileName);
             File.WriteAllText(filePath, code);
             return filePath;
@@ -471,25 +524,42 @@ namespace HarmonyPatchExtension
 
         // ========== VS Code Bridge ==========
 
-        public static void SendToVSCode(IMenuItemContext context, string patchChoice = "3")
+        public static void SendToVSCode(IMenuItemContext context, string patchChoice = null)
         {
+            patchChoice = patchChoice ?? PatchType.Both;
             var methods = GetMethods(context);
             if (methods == null || methods.Count == 0) return;
 
+            var eligible = methods.Where(IsMethodPatchable).ToList();
+            if (eligible.Count == 0) return;
+
             int sent = 0;
-            foreach (var method in methods)
+            foreach (var method in eligible)
             {
                 if (SendMethodToBridge(method, AppSettings.Namespace, patchChoice, AppSettings.Author,
                     AppSettings.StateEnabled, AppSettings.ExportPath))
                     sent++;
+                else
+                    break; // connection failed
             }
 
-            string msg = methods.Count == 1
-                ? "Sent 1 method to VS Code."
-                : $"Sent {sent}/{methods.Count} methods to VS Code.";
+            string msg;
             if (sent == 0)
                 msg = "Failed to send. Make sure the Harmony bridge is running in VS Code (localhost:5566).";
+            else if (sent == eligible.Count)
+                msg = eligible.Count == 1 ? "Sent 1 method to VS Code." : $"Sent all {sent} methods to VS Code.";
+            else
+                msg = $"Sent {sent}/{eligible.Count} methods to VS Code. Bridge may be offline.";
             MessageBox.Show(msg, "Harmony → VS Code");
+        }
+
+        public static bool IsMethodPatchable(MethodDef method)
+        {
+            if (method.DeclaringType == null) return false;
+            string name = method.Name;
+            if (name.StartsWith("<") || name.StartsWith("get_") || name.StartsWith("set_")) return false;
+            if (name == ".ctor" || name == ".cctor") return false;
+            return true;
         }
 
         public static bool SendMethodToBridge(MethodDef method, string ns, string patchChoice,
@@ -503,21 +573,17 @@ namespace HarmonyPatchExtension
                 string className = declaringType.FullName;
                 string methodName = method.Name;
 
-                if (methodName.StartsWith("<") || methodName.StartsWith("get_") || methodName.StartsWith("set_"))
-                    return false;
-
                 string json = BuildMethodJson(method, className, methodName, ns, patchChoice, author, useState, output);
 
-                var task = System.Threading.Tasks.Task.Run(() =>
+                // Offload to thread-pool to avoid SynchronizationContext deadlock from .Result
+                var response = System.Threading.Tasks.Task.Run(() =>
                 {
                     using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
                     {
                         var content = new StringContent(json, Encoding.UTF8, "application/json");
-                        return client.PostAsync("http://127.0.0.1:5566/", content).Result;
+                        return client.PostAsync("http://127.0.0.1:5566/", content);
                     }
-                });
-
-                var response = task.Result;
+                }).Result;
                 return response.IsSuccessStatusCode;
             }
             catch
