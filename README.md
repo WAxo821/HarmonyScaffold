@@ -16,9 +16,11 @@ IMPORTANT: Please read the following terms carefully before use.
 
 ---
 
-# HarmonyScaffold V3.1
+# HarmonyScaffold V4.0-alpha
 
 dnSpyEx + VS Code + CLI 三位一体的 Harmony 补丁开发工具链。
+
+> **Alpha 状态说明：** 热重载功能的编译管道已就绪，调试器注入部分（`DebuggerBridge.InjectMethodBody`）等待真实 Unity + dnSpy 调试会话环境下对接 `ReplaceMethodBody` API。欢迎通过 [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues) 反馈问题、提交 PR 或提供测试环境协助调试。
 
 ---
 
@@ -47,6 +49,7 @@ dnSpyEx + VS Code + CLI 三位一体的 Harmony 补丁开发工具链。
 - **一键初始化**：右键文件夹 → `Initialize BepInEx Plugin Project`，自动生成 Plugin.cs + PluginInfo.cs + .csproj + Patches/
 - **交互式生成**：`Ctrl+Shift+P` → `Generate Harmony Patch`，逐步选择类名、方法、参数、补丁类型
 - **dnSpyEx → VS Code 桥接**：启动桥接后在 localhost:5566 监听，dnSpyEx 右键方法 → `Send X to VS Code`，文件自动在 VS Code 工作区生成并打开
+- **热重载（Alpha）**：保存 `.cs` patch 文件时自动推送到 dnSpyEx 编译验证，1 秒防抖合并、未附加进程预检、耗时统计、编译结果即时反馈
 
 ### CLI 独立工具 `harmony-scaffold`
 
@@ -80,6 +83,23 @@ harmony-scaffold generate --json '{"class":"Player","method":"TakeDamage",...}'
 
 下载 `harmony-scaffold.exe`，自包含单文件，无需 .NET 运行时，可直接使用或加入 PATH。
 
+---
+
+## 热重载（Alpha）
+
+状态栏点击 `HotReload` 开启监听，保存 `.cs` patch 文件时自动执行：
+
+```
+1. 保存 .cs patch → 1 秒防抖合并
+2. VS Code POST → localhost:5567/hotreload
+3. dnSpyEx 检查调试器是否 attached（未 attach 立即返回错误）
+4. CodeDom 编译 → 验证通过/返回编译错误
+5. DebuggerBridge.InjectMethodBody（待对接调试器 API）
+6. 状态栏：绿钩成功 / 红叉失败 + 耗时统计
+```
+
+**当前限制：** 第 5 步（注入运行中进程）需要 dnSpy 已 attach 到 Unity 进程并启用调试端口（`--debugger-agent`），DebuggerBridge 的 `ReplaceMethodBody` 调用尚待真实环境验证。
+
 ### 3. CLI 工具（可选）
 
 `harmony-scaffold.exe` 是自包含单文件，无需 .NET 运行时。下载后直接使用，或加入 PATH。
@@ -100,12 +120,25 @@ harmony-scaffold generate --json '{"class":"Player","method":"TakeDamage",...}'
 
 ## 已知问题
 
+- 热重载注入部分（`DebuggerBridge.InjectMethodBody`）待真实 Unity + dnSpy 调试会话验证
 - `ref` 和 `out` 参数统一标记为 `ref`（dnlib 层面无法区分）
 - `ObfuscatorDetector` 对部分正常的 `Ldstr` + `Call` 模式可能误报
-- 桥接断开后需在 VS Code 手动重启（端口被占用时会提示）
-- CLI: 包含空格的复杂泛型参数类型（如 `List<int>`）需用 JSON 模式输入
+- 构造泛型类型（`Dictionary<string, int>`）在参数/返回值中会被降级为 `object`
+
+> 发现其他问题？请在 [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues) 提交，我们会尽快处理和修复。
 
 ---
+
+## V3.1 → V4.0-alpha
+
+- 新增热重载基础设施：HTTP server (5567) + CodeDom 编译 + 调试器桥接
+- 新增保存防抖：1 秒内多次保存自动合并为一次编译请求
+- 新增调试器附加状态预检：未 attach 时提前拒绝，不浪费编译时间
+- 新增状态栏反馈：编译中（旋转）/ 成功（绿钩）/ 失败（红叉）+ 耗时统计
+- 修复 `CleanGenericTypeName` 对构造泛型 `[[...]]` 语法的处理
+- HotReloadServer 启动异常保护，端口冲突不影响扩展加载
+- Bridge `HttpClient` 改为静态单例，避免 socket 耗尽
+- 恢复 `__instance` 参数过滤（修正格式匹配）
 
 ## V3.0 → V3.1 变更
 

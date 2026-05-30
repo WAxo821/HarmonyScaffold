@@ -68,6 +68,9 @@ namespace HarmonyScaffold
                 for (int i = 0; i < Math.Min(paramTypes.Length, paramNames.Length); i++)
                 {
                     string cleanType = CleanGenericTypeName(paramTypes[i]);
+                    // Skip parameter whose type matches the declaring class (redundant with __instance)
+                    if (CleanGenericTypeName(paramTypes[i]) == CleanGenericTypeName(className))
+                        continue;
                     filteredPairs.Add($"{cleanType} {paramNames[i]}");
                 }
                 paramSignature = string.Join(", ", filteredPairs);
@@ -188,6 +191,12 @@ namespace HarmonyScaffold
             if (isByRef) fullName = fullName.TrimEnd('&');
 
             string result = fullName;
+
+            // Strip constructed generic arguments (dnlib [[...]] syntax)
+            // e.g. Dictionary`2[[System.String,...],[System.Int32,...]] → Dictionary`2
+            int bracketStart = result.IndexOf("[[", StringComparison.Ordinal);
+            if (bracketStart >= 0)
+                result = result.Substring(0, bracketStart);
 
             // Convert backtick N → <,,> (open generic arity)
             int tick = result.IndexOf('`');

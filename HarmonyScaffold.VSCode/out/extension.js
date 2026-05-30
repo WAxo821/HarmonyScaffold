@@ -38,7 +38,9 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const cli_1 = require("./cli");
 const bridge_1 = require("./bridge");
+const hotreload_1 = require("./hotreload");
 let statusBarItem;
+let hotReloadStatusItem;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Harmony Scaffold');
     context.subscriptions.push(outputChannel);
@@ -194,8 +196,35 @@ function activate(context) {
             vscode.commands.executeCommand('harmony-scaffold.startBridge');
         }
     }));
-    // Auto-start bridge if desired (off by default)
-    // vscode.commands.executeCommand('harmony-scaffold.startBridge');
+    // ---- hot reload ----
+    hotReloadStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+    hotReloadStatusItem.command = 'harmony-scaffold.toggleHotReload';
+    hotReloadStatusItem.text = '$(debug-start) HotReload';
+    hotReloadStatusItem.tooltip = 'HotReload disabled — click to enable (auto-inject on save)';
+    hotReloadStatusItem.show();
+    context.subscriptions.push(hotReloadStatusItem);
+    context.subscriptions.push(vscode.commands.registerCommand('harmony-scaffold.enableHotReload', () => {
+        (0, hotreload_1.enableHotReload)(outputChannel, hotReloadStatusItem);
+        hotReloadStatusItem.text = '$(zap) HotReload';
+        hotReloadStatusItem.tooltip = `HotReload enabled on :${(0, hotreload_1.getPort)()} — save a .cs patch file to auto-inject`;
+        hotReloadStatusItem.backgroundColor = undefined;
+        vscode.window.showInformationMessage('Hot reload enabled — save .cs patch files to auto-inject');
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('harmony-scaffold.disableHotReload', () => {
+        (0, hotreload_1.disableHotReload)();
+        hotReloadStatusItem.text = '$(debug-start) HotReload';
+        hotReloadStatusItem.tooltip = 'HotReload disabled — click to enable';
+        hotReloadStatusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        vscode.window.showInformationMessage('Hot reload disabled');
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('harmony-scaffold.toggleHotReload', () => {
+        if ((0, hotreload_1.isActive)()) {
+            vscode.commands.executeCommand('harmony-scaffold.disableHotReload');
+        }
+        else {
+            vscode.commands.executeCommand('harmony-scaffold.enableHotReload');
+        }
+    }));
 }
 function updateStatusBar() {
     const status = (0, bridge_1.getStatus)();

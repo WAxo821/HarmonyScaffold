@@ -30,7 +30,11 @@ namespace HarmonyPatchExtension
     [ExportAutoLoaded(LoadType = AutoLoadedLoadType.AppLoaded)]
     public sealed class AutoLoadedEntry : IAutoLoaded
     {
-        public void OnLoaded() { }
+        public void OnLoaded()
+        {
+            try { HotReloadServer.Start(); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[HarmonyScaffold] HotReload start failed: {ex.Message}"); }
+        }
     }
 
     [ExportExtension]
@@ -239,6 +243,27 @@ namespace HarmonyPatchExtension
     }
     
     // ========== Send to VS Code ==========
+    // ========== Hot Reload Toggle ==========
+    [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Toggle Hot Reload Server", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 80)]
+    sealed class HotReloadToggleCommand : MenuItemBase
+    {
+        public override bool IsVisible(IMenuItemContext context) => true;
+
+        public override void Execute(IMenuItemContext context)
+        {
+            if (HotReloadServer.IsRunning)
+            {
+                HotReloadServer.Stop();
+                MessageBox.Show("Hot Reload server stopped.", "Hot Reload");
+            }
+            else
+            {
+                HotReloadServer.Start();
+                MessageBox.Show("Hot Reload server started on port 5567.\n\nSave a .cs patch file in VS Code to auto-inject.", "Hot Reload");
+            }
+        }
+    }
+
     [ExportMenuItem(OwnerGuid = MenuConstants.CTX_MENU_GUID, Header = "Send Prefix to VS Code", Group = MenuConstants.GROUP_CTX_DOCUMENTS_OTHER, Order = 110)]
     sealed class SendPreToVSCodeCommand : MenuItemBase
     {
@@ -524,6 +549,8 @@ namespace HarmonyPatchExtension
 
         // ========== VS Code Bridge ==========
 
+        private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+
         public static void SendToVSCode(IMenuItemContext context, string patchChoice = null)
         {
             patchChoice = patchChoice ?? PatchType.Both;
@@ -578,11 +605,8 @@ namespace HarmonyPatchExtension
                 // Offload to thread-pool to avoid SynchronizationContext deadlock from .Result
                 var response = System.Threading.Tasks.Task.Run(() =>
                 {
-                    using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
-                    {
-                        var content = new StringContent(json, Encoding.UTF8, "application/json");
-                        return client.PostAsync("http://127.0.0.1:5566/", content);
-                    }
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    return _httpClient.PostAsync("http://127.0.0.1:5566/", content);
                 }).Result;
                 return response.IsSuccessStatusCode;
             }

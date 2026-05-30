@@ -9,9 +9,11 @@ IMPORTANT: Please read the following terms carefully before use.
 
 ---
 
-# HarmonyScaffold V3.1
+# HarmonyScaffold V4.0-alpha
 
 A three-in-one Harmony patch development toolchain: dnSpyEx + VS Code + CLI.
+
+> **Alpha status:** The hot reload compilation pipeline is ready. The debugger injection part (`DebuggerBridge.InjectMethodBody`) awaits testing with a real Unity + dnSpy debug session to hook up the `ReplaceMethodBody` API. Please file issues, submit PRs, or help us test at [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues).
 
 ---
 
@@ -40,6 +42,7 @@ Right-click any method in dnSpyEx to generate Harmony patches:
 - **One-click init**: right-click a folder → `Initialize BepInEx Plugin Project`, auto-generates Plugin.cs + PluginInfo.cs + .csproj + Patches/
 - **Interactive generation**: `Ctrl+Shift+P` → `Generate Harmony Patch`, step-by-step class name, method, parameters, patch type selection
 - **dnSpyEx → VS Code bridge**: start the bridge to listen on localhost:5566, then in dnSpyEx right-click a method → `Send X to VS Code` — the patch file is generated and opened in VS Code automatically
+- **Hot Reload (Alpha)**: save a `.cs` patch file to auto-push to dnSpyEx for compilation. Features 1-second debounce merging, debugger-attach pre-check, timing stats, and instant feedback
 
 ### Standalone CLI `harmony-scaffold`
 
@@ -75,6 +78,23 @@ Download `harmony-scaffold.exe`. It is a self-contained single file — no .NET 
 
 ---
 
+## Hot Reload (Alpha)
+
+Click the `HotReload` status bar item to enable. Save a `.cs` patch file to trigger:
+
+```
+1. Save .cs patch → 1-second debounce merge
+2. VS Code POST → localhost:5567/hotreload
+3. dnSpyEx checks debugger attach status (rejects early if not attached)
+4. CodeDom compilation → returns success or compilation errors
+5. DebuggerBridge.InjectMethodBody (pending debugger API integration)
+6. Status bar: green check / red X + timing stats
+```
+
+**Current limitation:** Step 5 (runtime injection) requires dnSpy attached to a Unity process with `--debugger-agent` enabled. The `ReplaceMethodBody` call awaits real-environment validation.
+
+---
+
 ## dnSpyEx → VS Code Bridge
 
 ```
@@ -89,12 +109,25 @@ Five patch types can be sent independently: `Send Prefix / Postfix / Prefix+Post
 
 ## Known Issues
 
+- Hot reload injection (`DebuggerBridge.InjectMethodBody`) awaiting real Unity + dnSpy debug session verification
 - `ref` and `out` parameters are both labeled `ref` (dnlib cannot distinguish them at the IL level)
 - `ObfuscatorDetector` may produce false positives for normal `Ldstr` + `Call` patterns
-- If the bridge disconnects, restart it manually in VS Code (you'll be notified if the port is in use)
-- CLI: complex generic parameter types with spaces (e.g., `List<int>`) should use JSON mode
+- Constructed generic types (`Dictionary<string, int>`) in params/return types are degraded to `object`
+
+> Found another issue? Please file it at [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues) and we'll address it promptly.
 
 ---
+
+## V3.1 → V4.0-alpha
+
+- Added hot reload infrastructure: HTTP server (5567) + CodeDom compilation + debugger bridge
+- Added save debounce: multiple saves within 1 second merged into one compile request
+- Added debugger-attach pre-check: rejects early when no debug session is active
+- Added status bar feedback: compiling (spinner) / success (green check) / failure (red X) + timing
+- Fixed `CleanGenericTypeName` handling of constructed generics `[[...]]` syntax
+- HotReloadServer start guarded with try-catch — port conflict won't break extension loading
+- Bridge `HttpClient` changed to static singleton to prevent socket exhaustion
+- Restored `__instance` parameter filtering with corrected format matching
 
 ## V3.0 → V3.1 Changelog
 
@@ -135,4 +168,4 @@ All known V2.0/V2.1 bugs have been fixed in V3.0:
 | `HarmonyScaffold.dll` | Core logic library |
 | `HarmonyPatchExtension.x.dll` | dnSpyEx extension entry point |
 | `harmony-scaffold.exe` | Standalone CLI tool |
-| `harmony-scaffold-3.1.0.vsix` | VS Code extension installer |
+| `harmony-scaffold-4.0.0.vsix` | VS Code extension installer |

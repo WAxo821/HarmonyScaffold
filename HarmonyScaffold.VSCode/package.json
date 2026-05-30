@@ -2,7 +2,7 @@
     "name":  "harmony-scaffold",
     "displayName":  "Harmony Scaffold",
     "description":  "One-click BepInEx plugin init and Harmony patch generation for Unity modding",
-    "version":  "3.1.0",
+    "version":  "4.0.0",
     "publisher":  "harmony-scaffold",
     "engines":  {
                     "vscode":  "^1.85.0"
@@ -35,6 +35,18 @@
                                          {
                                              "command":  "harmony-scaffold.toggleBridge",
                                              "title":  "Harmony Scaffold: Toggle Bridge"
+                                         },
+                                         {
+                                             "command":  "harmony-scaffold.enableHotReload",
+                                             "title":  "Harmony Scaffold: Enable Hot Reload"
+                                         },
+                                         {
+                                             "command":  "harmony-scaffold.disableHotReload",
+                                             "title":  "Harmony Scaffold: Disable Hot Reload"
+                                         },
+                                         {
+                                             "command":  "harmony-scaffold.toggleHotReload",
+                                             "title":  "Harmony Scaffold: Toggle Hot Reload"
                                          }
                                      ],
                         "menus":  {
