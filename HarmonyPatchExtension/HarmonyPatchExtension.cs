@@ -232,13 +232,16 @@ namespace HarmonyPatchExtension
             var typeDef = PatchHelper.GetTypeDefFromNode(nodes[0]);
             if (typeDef == null) { MessageBox.Show("No type selected."); return; }
 
-            var methods = typeDef.Methods.Where(m => m.Body != null).ToList();
-            if (methods.Count == 0) { MessageBox.Show("No methods found in type."); return; }
+            var methods = typeDef.Methods
+                .Where(m => m.Body != null)
+                .Where(PatchHelper.IsMethodPatchable)
+                .ToList();
+            if (methods.Count == 0) { MessageBox.Show("No patchable methods found in type."); return; }
 
             string code = PatchGenerator.GenerateFromMethods(methods, AppSettings.Namespace, PatchType.Both, AppSettings.Author, AppSettings.StateEnabled);
             string filePath = PatchHelper.SaveFile(code, typeDef.Name);
             Clipboard.SetText(code);
-            MessageBox.Show($"Generated {methods.Count} methods from {typeDef.Name}!\n\nSaved to: {filePath}", "Harmony Patch Generator");
+            MessageBox.Show($"Generated {methods.Count} method(s) from {typeDef.Name}!\n\nSaved to: {filePath}", "Harmony Patch Generator");
         }
     }
     
@@ -251,15 +254,23 @@ namespace HarmonyPatchExtension
 
         public override void Execute(IMenuItemContext context)
         {
-            if (HotReloadServer.IsRunning)
+            try
             {
-                HotReloadServer.Stop();
-                MessageBox.Show("Hot Reload server stopped.", "Hot Reload");
+                if (HotReloadServer.IsRunning)
+                {
+                    HotReloadServer.Stop();
+                    MessageBox.Show("Hot Reload server stopped.", "Hot Reload");
+                }
+                else
+                {
+                    HotReloadServer.Start();
+                    MessageBox.Show("Hot Reload server started on port 5567.\n\nSave a .cs patch file in VS Code to auto-inject.", "Hot Reload");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                HotReloadServer.Start();
-                MessageBox.Show("Hot Reload server started on port 5567.\n\nSave a .cs patch file in VS Code to auto-inject.", "Hot Reload");
+                MessageBox.Show($"Hot Reload failed: {ex.Message}", "Hot Reload Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

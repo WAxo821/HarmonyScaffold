@@ -80,18 +80,60 @@ Download `harmony-scaffold.exe`. It is a self-contained single file — no .NET 
 
 ## Hot Reload (Alpha)
 
-Click the `HotReload` status bar item to enable. Save a `.cs` patch file to trigger:
+Click `HotReload` in the status bar to enable. Save a `.cs` patch file to trigger:
 
 ```
 1. Save .cs patch → 1-second debounce merge
 2. VS Code POST → localhost:5567/hotreload
-3. dnSpyEx checks debugger attach status (rejects early if not attached)
-4. CodeDom compilation → returns success or compilation errors
-5. DebuggerBridge.InjectMethodBody (pending debugger API integration)
-6. Status bar: green check / red X + timing stats
+3. CodeDom compilation → returns success or compilation errors
+4. Write DLL to BepInEx/plugins/hot-reload/harmony_patch_xxx.dll
+5. HarmonyHotReloadPlugin (FileSystemWatcher) detects new file
+6. Assembly.Load → Harmony.PatchAll()
+7. Unity Domain Reload → patch takes effect
 ```
 
-**Current limitation:** Step 5 (runtime injection) requires dnSpy attached to a Unity process with `--debugger-agent` enabled. The `ReplaceMethodBody` call awaits real-environment validation.
+**Current approach: Plan A (file system + Domain Reload). Known limitations below.**
+
+---
+
+## Known Issues & Limitations
+
+### Hot Reload (Plan A — inherent limitations)
+
+The current hot reload uses a **file system + BepInEx Domain Reload** approach. These limitations cannot be resolved within this architecture and are planned for Plan B (ICorDebug EnC debugger injection):
+
+| Limitation | Details |
+|-----------|---------|
+| **No automatic runtime loading** | BepInEx only scans `plugins/` at startup. Runtime-added DLLs require `FileSystemWatcher` + `Assembly.Load(byte[])` — `Chainloader` dependency injection and config injection do not fire |
+| **Domain Reload is uncontrolled** | Behavior varies across Unity versions and Mono/IL2CPP modes. Each reload takes 3-10 seconds; all game state (static variables, singletons, caches) is lost |
+| **Old patch cleanup incomplete** | Old and new patches coexist in the same domain. Harmony may retain references to old assemblies, causing duplicate patches or logic conflicts. No patch version tracking or Unpatch |
+| **`__state` data resets** | Domain Reload zeroes all runtime state. Patches relying on accumulated state (counters, caches) behave incorrectly after reload |
+| **No error rollback** | If compilation fails or Harmony throws during patching, the old patch is already unloaded but the new one never activates — leaving the target method unpatched, potentially crashing the game |
+| **Fixed port conflict** | Port 5567 is hardcoded. Running multiple dnSpyEx instances leads to port conflicts |
+| **Constructed generics degraded** | Constructed generic types (`Dictionary<string, int>`) in params/return types are degraded to `object` |
+| **CodeDom C# 5.0 limit** | Modern C# features (`?.`, `??=`, switch expressions) fail to compile. Migration to Roslyn planned |
+
+### Patch Generation (historical — all resolved)
+
+The following V2.x → V3.x bugs are fully patched:
+
+- ~~Generic class `typeof(List<T>)` fails to compile~~ → Fixed: open generic `typeof(List<>)` + string method reference
+- ~~`.ctor` / `.cctor` not filtered~~ → Fixed: auto-skipped
+- ~~Finalizer comma error with zero params~~ → Fixed
+- ~~void Prefix incorrectly emits `bool` return~~ → Fixed
+- ~~Interface `typeof(Iface)` compilation error~~ → Fixed: warning comment added
+- ~~Overload name collision~~ → Fixed: `_2` / `_3` suffixes
+
+### General
+
+| Limitation | Details |
+|-----------|---------|
+| `ref` / `out` both labeled `ref` | dnlib cannot distinguish them at the IL level |
+| `ObfuscatorDetector` false positives | Normal `Ldstr` + `Call` patterns may be misidentified as ConfuserEx string encryption |
+| Hardcoded local paths | Build-from-source only; published DLLs are unaffected |
+| CLI complex generic params | Types containing spaces (e.g., `List<int>`) require JSON input mode |
+
+> Found another issue? Please report it on [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues).
 
 ---
 
@@ -107,27 +149,19 @@ Five patch types can be sent independently: `Send Prefix / Postfix / Prefix+Post
 
 ---
 
-## Known Issues
-
-- Hot reload injection (`DebuggerBridge.InjectMethodBody`) awaiting real Unity + dnSpy debug session verification
-- `ref` and `out` parameters are both labeled `ref` (dnlib cannot distinguish them at the IL level)
-- `ObfuscatorDetector` may produce false positives for normal `Ldstr` + `Call` patterns
-- Constructed generic types (`Dictionary<string, int>`) in params/return types are degraded to `object`
-
-> Found another issue? Please file it at [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues) and we'll address it promptly.
-
----
-
 ## V3.1 → V4.0-alpha
 
-- Added hot reload infrastructure: HTTP server (5567) + CodeDom compilation + debugger bridge
+- Added hot reload (Plan A): file system + BepInEx Domain Reload — compile pipeline → DLL deploy → HarmonyHotReloadPlugin watcher
+- Added `HarmonyHotReloadPlugin.cs` — BepInEx hot reload watcher plugin template
 - Added save debounce: multiple saves within 1 second merged into one compile request
-- Added debugger-attach pre-check: rejects early when no debug session is active
 - Added status bar feedback: compiling (spinner) / success (green check) / failure (red X) + timing
+- Added `harmony-scaffold.hotReloadOutput` VS Code configuration setting
 - Fixed `CleanGenericTypeName` handling of constructed generics `[[...]]` syntax
 - HotReloadServer start guarded with try-catch — port conflict won't break extension loading
 - Bridge `HttpClient` changed to static singleton to prevent socket exhaustion
-- Restored `__instance` parameter filtering with corrected format matching
+- Toggle command wrapped in try-catch with error dialog
+- GenerateAllCommand count corrected (filtered constructors/properties after counting)
+- `__instance` parameter dedup restored
 
 ## V3.0 → V3.1 Changelog
 

@@ -88,7 +88,10 @@ function flushPending(outputChannel, statusItem) {
     // Send the last file (most recently saved) — covers the common single-file case.
     // For multi-file, merge all code together.
     const code = entries.map(([path, text]) => `// source: ${path}\n${text}`).join('\n\n');
-    postHotReload(code).then(result => {
+    const outputDir = vscode.workspace.getConfiguration('harmony-scaffold').get('hotReloadOutput')
+        || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+        || '';
+    postHotReload(code, outputDir).then(result => {
         if (result.success) {
             const tot = result.compileTimeMs + result.injectTimeMs;
             outputChannel.appendLine(`[HotReload] OK — compile ${result.compileTimeMs}ms, inject ${result.injectTimeMs}ms, total ${tot}ms`);
@@ -118,9 +121,9 @@ function disableHotReload() {
     }
     pendingFiles.clear();
 }
-async function postHotReload(code) {
+async function postHotReload(code, outputDir) {
     return new Promise((resolve) => {
-        const body = JSON.stringify({ code, assembly: 'Assembly-CSharp' });
+        const body = JSON.stringify({ code, assembly: 'Assembly-CSharp', output: outputDir });
         const req = http.request({
             hostname: '127.0.0.1',
             port: hotReloadPort,

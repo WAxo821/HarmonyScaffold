@@ -64,12 +64,13 @@ namespace HarmonyScaffold
             string paramSignature = "";
             if (paramTypes.Length > 0 && paramNames.Length > 0)
             {
+                string cleanClass = CleanGenericTypeName(className);
                 var filteredPairs = new List<string>();
                 for (int i = 0; i < Math.Min(paramTypes.Length, paramNames.Length); i++)
                 {
                     string cleanType = CleanGenericTypeName(paramTypes[i]);
                     // Skip parameter whose type matches the declaring class (redundant with __instance)
-                    if (CleanGenericTypeName(paramTypes[i]) == CleanGenericTypeName(className))
+                    if (cleanType == cleanClass)
                         continue;
                     filteredPairs.Add($"{cleanType} {paramNames[i]}");
                 }

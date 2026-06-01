@@ -60,7 +60,11 @@ function flushPending(
         `// source: ${path}\n${text}`
     ).join('\n\n');
 
-    postHotReload(code).then(result => {
+    const outputDir = vscode.workspace.getConfiguration('harmony-scaffold').get<string>('hotReloadOutput')
+        || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+        || '';
+
+    postHotReload(code, outputDir).then(result => {
         if (result.success) {
             const tot = result.compileTimeMs + result.injectTimeMs;
             outputChannel.appendLine(
@@ -95,9 +99,9 @@ export function disableHotReload(): void {
     pendingFiles.clear();
 }
 
-async function postHotReload(code: string): Promise<HotReloadResponse> {
+async function postHotReload(code: string, outputDir: string): Promise<HotReloadResponse> {
     return new Promise((resolve) => {
-        const body = JSON.stringify({ code, assembly: 'Assembly-CSharp' });
+        const body = JSON.stringify({ code, assembly: 'Assembly-CSharp', output: outputDir });
         const req = http.request({
             hostname: '127.0.0.1',
             port: hotReloadPort,

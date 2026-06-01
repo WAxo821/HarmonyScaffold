@@ -130,16 +130,16 @@ namespace HarmonyPatchExtension
                 var request = SimpleJson.Parse(json);
                 string code = request.GetString("code");
                 string assemblyName = request.GetString("assembly") ?? "Assembly-CSharp";
+                string outputDir = request.GetString("output") ?? GetDefaultOutputDir();
 
                 if (string.IsNullOrWhiteSpace(code))
                     return new HotReloadResult { success = false, error = "Missing code" };
 
-                // Phase 0: Check debugger is attached to a target process
-                if (!DebuggerBridge.IsDebuggerAttached())
+                if (string.IsNullOrWhiteSpace(outputDir) || !Directory.Exists(outputDir))
                     return new HotReloadResult
                     {
                         success = false,
-                        error = "No debugger session. Attach dnSpy to a running Unity process first."
+                        error = "Output directory not found. Configure BepInEx plugins path in VS Code settings."
                     };
 
                 // Phase 1: Compile
@@ -151,19 +151,24 @@ namespace HarmonyPatchExtension
                         error = string.Join("\n", compileResult.errors)
                     };
 
-                // Phase 2: Inject via debugger
-                var injectResult = DebuggerBridge.InjectMethodBody(
-                    compileResult.assemblyPath, assemblyName);
+                // Phase 2: Deploy to BepInEx hot-reload directory
+                string targetDir = Path.Combine(outputDir, "hot-reload");
+                Directory.CreateDirectory(targetDir);
+                string destPath = Path.Combine(targetDir,
+                    $"harmony_patch_{DateTime.Now:yyyyMMdd_HHmmss}.dll");
+                File.Copy(compileResult.assemblyPath, destPath, overwrite: true);
+
+                // Cleanup temp file
+                try { File.Delete(compileResult.assemblyPath); } catch { }
+
                 sw.Stop();
 
                 return new HotReloadResult
                 {
-                    success = injectResult.success,
+                    success = true,
                     compileTimeMs = compileResult.compileTimeMs,
-                    injectTimeMs = injectResult.injectTimeMs,
-                    message = injectResult.success
-                        ? $"Hot reload OK — compile {compileResult.compileTimeMs}ms, inject {injectResult.injectTimeMs}ms, total {sw.ElapsedMilliseconds}ms"
-                        : injectResult.error
+                    injectTimeMs = sw.ElapsedMilliseconds - compileResult.compileTimeMs,
+                    message = $"Hot reload OK — compile {compileResult.compileTimeMs}ms, deploy {sw.ElapsedMilliseconds - compileResult.compileTimeMs}ms, total {sw.ElapsedMilliseconds}ms"
                 };
             }
             catch (Exception ex)
@@ -220,6 +225,23 @@ namespace HarmonyPatchExtension
 
                 return (true, tempDll, errors.ToArray(), sw.ElapsedMilliseconds);
             }
+        }
+
+        private static string GetDefaultOutputDir()
+        {
+            string[] candidates =
+            {
+                Path.Combine(AppSettings.Folder, "..", "..", "BepInEx", "plugins"),
+                Path.Combine(AppSettings.Folder, "..", "..", "MelonLoader", "Mods"),
+            };
+
+            foreach (var dir in candidates)
+            {
+                var full = Path.GetFullPath(dir);
+                if (Directory.Exists(full)) return full;
+            }
+
+            return null;
         }
 
         private static string FindManagedDirectory()

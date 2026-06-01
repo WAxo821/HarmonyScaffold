@@ -92,13 +92,55 @@ harmony-scaffold generate --json '{"class":"Player","method":"TakeDamage",...}'
 ```
 1. 保存 .cs patch → 1 秒防抖合并
 2. VS Code POST → localhost:5567/hotreload
-3. dnSpyEx 检查调试器是否 attached（未 attach 立即返回错误）
-4. CodeDom 编译 → 验证通过/返回编译错误
-5. DebuggerBridge.InjectMethodBody（待对接调试器 API）
-6. 状态栏：绿钩成功 / 红叉失败 + 耗时统计
+3. CodeDom 编译 → 验证通过/返回编译错误
+4. 写入 BepInEx/plugins/hot-reload/harmony_patch_xxx.dll
+5. HarmonyHotReloadPlugin (FileSystemWatcher) 检测新文件
+6. Assembly.Load → Harmony.PatchAll()
+7. Unity Domain Reload → 补丁生效
 ```
 
-**当前限制：** 第 5 步（注入运行中进程）需要 dnSpy 已 attach 到 Unity 进程并启用调试端口（`--debugger-agent`），DebuggerBridge 的 `ReplaceMethodBody` 调用尚待真实环境验证。
+**当前实现方案：方案 A（文件 + Domain Reload），已知限制见下方。**
+
+---
+
+## 已知问题与限制
+
+### 热重载（方案 A 固有限制）
+
+热重载当前采用**文件系统 + BepInEx Domain Reload** 方案，以下限制无法在此框架内解决，计划在方案 B（ICorDebug EnC 调试器注入）中修复：
+
+| 限制 | 说明 |
+|------|------|
+| **运行时不自动加载** | BepInEx 标准行为只在启动时扫描 `plugins/`，运行中新增 DLL 需借助 `FileSystemWatcher` + `Assembly.Load(byte[])`手动加载。`Chainloader` 的依赖注入和配置注入不会触发 |
+| **Domain Reload 不可控** | 不同 Unity 版本、不同 Mono/IL2CPP 模式下 Domain Reload 行为不一致。每次重载 3-10 秒，游戏状态（static 变量、单例、缓存）全部丢失 |
+| **旧补丁清理不完整** | 新旧补丁在同一域中时，Harmony 可能持有旧补丁引用，导致重复补丁或逻辑冲突。当前未实现补丁版本追踪和 Unpatch |
+| **`__state` 数据重置** | Domain Reload 后运行时状态全部归零，依赖计数器、缓存等累积状态的补丁行为不符合预期 |
+| **错误回滚缺失** | 编译失败或 Harmony 应用异常时，旧的补丁已被卸载但新补丁未生效，目标方法进入无补丁状态，可能导致游戏崩溃 |
+| **多实例端口冲突** | 端口 5567 固定，同时打开多个 dnSpyEx 实例会冲突 |
+| **构造泛型降级** | 构造泛型类型（如 `Dictionary<string, int>`）在参数/返回值中被降级为 `object` |
+| **CodeDom 限制** | CodeDom 仅支持 C# 5.0 语法，现代 C# 特性（`?.`, `??=`，switch 表达式）会编译失败。计划迁移到 Roslyn |
+
+### 补丁生成（已修复，仅供参考）
+
+以下为 V2.x → V3.x 期间已修复的历史问题，现均已正确处理：
+
+- ~~泛型类 `typeof(List<T>)` 无法编译~~ → 已修复：开放泛型 `typeof(List<>)` + 字符串方法引用
+- ~~`.ctor` / `.cctor` 构造器未被过滤~~ → 已修复：自动跳过
+- ~~Finalizer 无参数逗号拼接错误~~ → 已修复
+- ~~void Prefix 错误生成 `bool` 返回值~~ → 已修复
+- ~~接口方法 `typeof(Iface)` 编译错误~~ → 已修复：自动添加警告注释
+- ~~重载方法类名冲突~~ → 已修复：`_2` / `_3` 后缀
+
+### 通用
+
+| 限制 | 说明 |
+|------|------|
+| `ref` / `out` 统一标记为 `ref` | dnlib 层面无法区分二者 |
+| `ObfuscatorDetector` 误报 | 部分正常的 `Ldstr` + `Call` 模式可能被误判为 ConfuserEx 字符串加密 |
+| 硬编码本地路径 | 仅影响从源码编译的用户，发布版 DLL 不受影响 |
+| CLI 复杂泛型参数 | 包含空格的类型（如 `List<int>`）需通过 JSON 模式输入 |
+
+> 发现其他问题？请在 [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues) 提交。
 
 ### 3. CLI 工具（可选）
 
@@ -118,27 +160,19 @@ harmony-scaffold generate --json '{"class":"Player","method":"TakeDamage",...}'
 
 ---
 
-## 已知问题
-
-- 热重载注入部分（`DebuggerBridge.InjectMethodBody`）待真实 Unity + dnSpy 调试会话验证
-- `ref` 和 `out` 参数统一标记为 `ref`（dnlib 层面无法区分）
-- `ObfuscatorDetector` 对部分正常的 `Ldstr` + `Call` 模式可能误报
-- 构造泛型类型（`Dictionary<string, int>`）在参数/返回值中会被降级为 `object`
-
-> 发现其他问题？请在 [GitHub Issues](https://github.com/WAxo821/HarmonyScaffold/issues) 提交，我们会尽快处理和修复。
-
----
-
 ## V3.1 → V4.0-alpha
 
-- 新增热重载基础设施：HTTP server (5567) + CodeDom 编译 + 调试器桥接
+- 新增热重载（方案 A）：文件 + BepInEx Domain Reload，编译管道 → DLL 部署 → HarmonyHotReloadPlugin 监听加载
+- 新增 `HarmonyHotReloadPlugin.cs` — BepInEx 热重载监听插件模板
 - 新增保存防抖：1 秒内多次保存自动合并为一次编译请求
-- 新增调试器附加状态预检：未 attach 时提前拒绝，不浪费编译时间
 - 新增状态栏反馈：编译中（旋转）/ 成功（绿钩）/ 失败（红叉）+ 耗时统计
+- 新增 `harmony-scaffold.hotReloadOutput` VS Code 配置项
 - 修复 `CleanGenericTypeName` 对构造泛型 `[[...]]` 语法的处理
 - HotReloadServer 启动异常保护，端口冲突不影响扩展加载
 - Bridge `HttpClient` 改为静态单例，避免 socket 耗尽
-- 恢复 `__instance` 参数过滤（修正格式匹配）
+- Toggle 命令 try-catch + 错误反馈
+- GenerateAllCommand 报告数量修正（过滤构造器/属性后计数）
+- `__instance` 参数过滤去重
 
 ## V3.0 → V3.1 变更
 

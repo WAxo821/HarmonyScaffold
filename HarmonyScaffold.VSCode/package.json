@@ -57,7 +57,17 @@
                                                                    "group":  "harmony"
                                                                }
                                                            ]
-                                  }
+                                  },
+                        "configuration":  {
+                                              "title":  "Harmony Scaffold",
+                                              "properties":  {
+                                                                 "harmony-scaffold.hotReloadOutput":  {
+                                                                                                         "type":  "string",
+                                                                                                         "default":  "",
+                                                                                                         "description":  "Path to BepInEx/plugins directory for hot reload output"
+                                                                                                     }
+                                                             }
+                                          }
                     },
     "scripts":  {
                     "vscode:prepublish":  "npm run compile",
